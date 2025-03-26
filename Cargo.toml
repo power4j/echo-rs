@@ -1,0 +1,22 @@
+[package]
+name = "echo-server"
+version = "0.1.0"
+edition = "2021"
+authors = [
+    "CJ <power4j@outlook.com>",
+]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4.5", features = ["derive"] }
+
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
