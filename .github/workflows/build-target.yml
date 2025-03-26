@@ -23,6 +23,7 @@ jobs:
     env:
       build-tool: ${{ contains( inputs.target, 'windows-msvc' ) && 'build' || 'zigbuild' }}
       executable: ./target/${{inputs.target}}/release/*.exe
+      binary-name: echo-server
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +45,7 @@ jobs:
       - name: Upload product as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: artifact
+          # Artifact names must be unique
+          name: ${{ env.binary-name }}-${{ inputs.target }}
           path: |
             ${{ env.executable }}
