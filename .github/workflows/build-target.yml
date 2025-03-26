@@ -1,4 +1,4 @@
-name: Build Specify Target
+name: Build Target
 
 env:
   CARGO_TERM_COLOR: always
