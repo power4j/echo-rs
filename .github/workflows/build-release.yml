@@ -67,7 +67,7 @@ jobs:
           body_path: ./body.txt
           draft: false
           fail_on_unmatched_files: true
-          prerelease: false
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: |
             ./product/*.zip
             ./product/*.tar.gz
