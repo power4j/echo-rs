@@ -1,71 +1,73 @@
 name: Build and Release
+name: Release By Zigbuild
+
+permissions:
+  "contents": "write"
 
 on:
+  pull_request:
   push:
     tags:
-      - 'v*' # 当推送标签时触发
-  pull_request:
-  workflow_dispatch: # 允许手动触发
-
+      - '**[0-9]+.[0-9]+.[0-9]+*'
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  build-all:
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
         target:
-          - { os: ubuntu-latest, target: i686-unknown-linux-musl, artifact_name: echo-server }
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, artifact_name: echo-server }
-          - { os: ubuntu-latest, target: aarch64-unknown-linux-musl, artifact_name: echo-server }
-          - { os: windows-latest, target: i686-pc-windows-msvc, artifact_name: echo-server.exe }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc, artifact_name: echo-server.exe }
-          - { os: windows-latest, target: aarch64-pc-windows-msvc, artifact_name: echo-server.exe }
-          - { os: macos-latest, target: x86_64-apple-darwin, artifact_name: echo-server }
-          - { os: macos-latest, target: aarch64-apple-darwin, artifact_name: echo-server }
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.target.target }}
-          override: true
-
-      - name: install target
-        run: rustup target add ${{ inputs.target }}
-      - uses: mlugg/setup-zig@v1
-        if: matrix.os != 'windows-latest'
-      - name: Install cargo-zigbuild
-        if: matrix.os != 'windows-latest'
-        run: cargo install cargo-zigbuild
-      - name: Build (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cargo build --target ${{ matrix.target.target }} --release
-      - name: Build (Linux/macOS)
-        if: matrix.os != 'windows-latest'
-        run: cargo zigbuild --target ${{ matrix.target.target }} --release
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target.target }}
-          path: target/${{ matrix.target.target }}/release/${{ matrix.target.artifact_name }}
-
-
+          - "aarch64-apple-darwin"
+          - "x86_64-apple-darwin"
+          - "i686-unknown-linux-musl"
+          - "x86_64-unknown-linux-musl"
+          - "aarch64-unknown-linux-musl"
+          - "x86_64-pc-windows-msvc"
+          - "i686-pc-windows-msvc"
+    name: Build For ${{ matrix.target }}
+    uses: ./.github/workflows/build.yml
+    with:
+      target: ${{ matrix.target }}
   release:
-    needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-all
     steps:
       - uses: actions/checkout@v4
-      - name: Download Artifacts
+        with:
+          submodules: recursive
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-      - name: Create Release
+          path: product
+          pattern: name-*
+          merge-multiple: false
+      - name: read CHANGELOG.md
+        id: read
+        run: |
+          echo "TITLE=$(awk '/^#[^#]/{sub(/^# /, ""); print; exit}' CHANGELOG.md)" >> "$GITHUB_ENV"
+          echo "$(awk '/^#[^#]/{if (flag) exit; flag=1; next} flag {if ($0 ~ /\S/) {print; found=1} else if (found) {print}}' CHANGELOG.md)" > body.txt
+      - name: compress
+        run: |
+          cd product
+          for dir in */; do
+              dirname="${dir%/}"
+              if [[ $dirname == *"windows"* ]]; then
+                  echo "package $dirname to $dirname.zip"
+                  zip -r "$dirname.zip" "$dirname"
+              else
+                  echo "package $dirname to $dirname.tar.gz"
+                  tar -czf "$dirname.tar.gz" "$dirname"
+              fi
+          done
+      - name: List Directory
+        run: ls -R product
+      - name: Upload Release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: artifacts/**/*
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          name: ${{ env.TITLE }}
+          body_path: ./body.txt
+          draft: false
+          fail_on_unmatched_files: true
+          prerelease: false
+          files: |
+            ./product/*.zip
+            ./product/*.tar.gz
